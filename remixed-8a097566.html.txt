@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laluan Armada — Puzzle Laut</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#d4a843;--gold2:#f0c060;--gold3:#7a5010;
+  --navy:#05090f;--navy2:#0a1520;--navy3:#101e30;
+  --sea:#0e2a50;--sea2:#162e55;--sea3:#1e3e6a;
+  --cream:#f0e0b8;--sand:#c8a870;
+  --pipe-water:rgba(40,140,220,0.85);
+  --pipe-glow:rgba(80,180,255,0.6);
+}
+*{margin:0;padding:0;box-sizing:border-box;user-select:none;}
+body{min-height:100vh;background:var(--navy);font-family:'Crimson Pro',serif;color:var(--cream);display:flex;flex-direction:column;align-items:center;overflow-x:hidden;}
+
+/* ── BG ── */
+#bg{position:fixed;inset:0;z-index:0;
+  background:radial-gradient(ellipse at 40% 0%,#0e2040 0%,#060d18 55%,#020608 100%);}
+.star{position:absolute;border-radius:50%;background:#fff;animation:tw 3s infinite alternate;}
+@keyframes tw{0%{opacity:.1}100%{opacity:.8}}
+
+/* ── WRAP ── */
+#wrap{position:relative;z-index:1;width:100%;max-width:500px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:10px;min-height:100vh;}
+
+/* ── HEADER ── */
+.title{font-family:'Cinzel Decorative',serif;font-size:clamp(.95rem,3.5vw,1.4rem);
+  background:linear-gradient(135deg,var(--gold2),var(--gold),var(--gold3));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  letter-spacing:2px;text-align:center;}
+.subtitle{font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:4px;color:var(--gold);opacity:.65;text-align:center;margin-top:2px;}
+
+/* ── HUD ── */
+#hud{width:100%;display:flex;justify-content:space-between;align-items:center;
+  padding:7px 14px;background:rgba(0,0,0,.55);border:1px solid rgba(212,168,67,.2);
+  border-radius:8px;backdrop-filter:blur(8px);}
+.hud-item{text-align:center;}
+.hud-val{font-family:'Cinzel',serif;font-size:1.1rem;color:var(--gold2);line-height:1;}
+.hud-lbl{font-size:.58rem;letter-spacing:1px;color:var(--sand);text-transform:uppercase;opacity:.8;}
+#level-badge{font-family:'Cinzel',serif;font-size:.75rem;letter-spacing:2px;color:var(--gold);
+  padding:4px 14px;border:1px solid rgba(212,168,67,.3);border-radius:20px;}
+
+/* ── GRID ── */
+#grid-wrap{position:relative;
+  border:2px solid rgba(212,168,67,.35);border-radius:8px;
+  box-shadow:0 0 50px rgba(0,0,0,.9),0 0 100px rgba(10,40,80,.4);
+  overflow:hidden;}
+#grid{display:grid;background:var(--navy2);}
+
+/* ── TILE ── */
+.tile{
+  position:relative;cursor:pointer;overflow:hidden;
+  transition:transform .12s,box-shadow .12s;
+  background:var(--sea);
+}
+.tile:hover{background:var(--sea3);}
+.tile:active{transform:scale(.94);}
+.tile.locked{cursor:default;}
+.tile.locked:active{transform:none;}
+.tile.start{background:rgba(46,160,60,.18)!important;border:1px solid rgba(46,160,60,.5);}
+.tile.end{background:rgba(212,100,20,.18)!important;border:1px solid rgba(212,100,20,.5);}
+
+/* water shimmer overlay on each tile */
+.tile::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(20,80,160,.12) 0%,transparent 70%);pointer-events:none;}
+
+/* ── PIPE CANVAS (drawn per tile via JS) ── */
+.tile canvas{position:absolute;inset:0;pointer-events:none;}
+
+/* Locked tile overlay */
+.tile.locked::after{content:'🔒';position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;font-size:.9em;opacity:.35;pointer-events:none;}
+
+/* ── WATER FLOW ANIMATION on solved path ── */
+.tile.flowing .pipe-svg path{
+  stroke-dasharray:100;
+  animation:flow 1.2s linear infinite;
+}
+@keyframes flow{0%{stroke-dashoffset:100}100%{stroke-dashoffset:0}}
+
+/* ── MSG ── */
+#msg{font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:1px;
+  color:var(--gold2);text-align:center;min-height:22px;
+  text-shadow:0 0 12px rgba(240,192,96,.5);}
+
+/* ── BOTTOM ── */
+#bottom{width:100%;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.btn{font-family:'Cinzel',serif;font-size:.72rem;letter-spacing:1px;
+  padding:8px 18px;border-radius:5px;cursor:pointer;transition:all .2s;border:none;}
+.btn-gold{background:linear-gradient(135deg,var(--gold3),var(--gold),var(--gold3));color:var(--navy);font-weight:700;}
+.btn-gold:hover{box-shadow:0 0 18px rgba(212,168,67,.5);transform:translateY(-1px);}
+.btn-out{background:transparent;border:1px solid rgba(212,168,67,.35);color:var(--gold);}
+.btn-out:hover{background:rgba(212,168,67,.1);}
+
+/* ── WIN OVERLAY ── */
+.overlay{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:rgba(0,0,0,.9);
+  backdrop-filter:blur(10px);text-align:center;padding:20px;}
+.overlay h1{font-family:'Cinzel Decorative',serif;font-size:clamp(1.3rem,5vw,2.2rem);
+  background:linear-gradient(135deg,var(--gold2),var(--gold),var(--gold3));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px;}
+.overlay p{color:var(--sand);font-size:.92rem;line-height:1.7;max-width:380px;margin-bottom:16px;}
+.badge-sm{display:inline-block;padding:3px 12px;border:1px solid rgba(212,168,67,.3);
+  border-radius:20px;font-size:.68rem;letter-spacing:2px;color:var(--gold);margin-bottom:12px;}
+.big-btn{font-family:'Cinzel',serif;font-size:.9rem;letter-spacing:2px;padding:12px 30px;
+  background:linear-gradient(135deg,var(--gold3),var(--gold),var(--gold3));
+  color:var(--navy);border:none;border-radius:4px;cursor:pointer;margin:4px;
+  box-shadow:0 0 18px rgba(212,168,67,.4);transition:all .2s;}
+.big-btn:hover{transform:translateY(-2px);box-shadow:0 0 32px rgba(212,168,67,.65);}
+.big-btn.sec{background:rgba(212,168,67,.1);color:var(--gold);border:1px solid rgba(212,168,67,.4);}
+
+/* ── LEVEL SELECT ── */
+#level-select{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;max-width:340px;margin-top:8px;}
+.lv-btn{font-family:'Cinzel',serif;font-size:.75rem;padding:10px 6px;text-align:center;
+  background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.25);
+  border-radius:6px;cursor:pointer;color:var(--gold);transition:all .2s;}
+.lv-btn:hover{background:rgba(212,168,67,.2);border-color:var(--gold);}
+.lv-btn .lv-n{font-family:'Cinzel Decorative',serif;font-size:1.1rem;color:var(--gold2);display:block;}
+.lv-btn .lv-d{font-size:.6rem;opacity:.7;margin-top:2px;}
+
+/* ship floating on solved path */
+@keyframes sail{
+  0%{transform:translate(var(--sx),var(--sy));}
+  100%{transform:translate(var(--ex),var(--ey));}
+}
+#sailing-ship{
+  position:absolute;z-index:10;font-size:1.2rem;pointer-events:none;
+  transition:left .35s ease,top .35s ease;
+  filter:drop-shadow(0 0 6px rgba(212,168,67,.8));
+}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+
+<div id="wrap">
+  <div class="title">LALUAN ARMADA</div>
+  <div class="subtitle">☽ PUZZLE LAUT MEDITERRANEAN · 654 MASIHI</div>
+
+  <div id="hud">
+    <div class="hud-item">
+      <div class="hud-val" id="hud-moves">0</div>
+      <div class="hud-lbl">Gerakan</div>
+    </div>
+    <div id="level-badge">PERINGKAT 1</div>
+    <div class="hud-item">
+      <div class="hud-val" id="hud-time">0:00</div>
+      <div class="hud-lbl">Masa</div>
+    </div>
+  </div>
+
+  <div id="grid-wrap">
+    <div id="grid"></div>
+    <div id="sailing-ship" style="display:none">⛵</div>
+  </div>
+
+  <div id="msg">Putar kepingan peta — sambungkan laluan kapal!</div>
+
+  <div id="bottom">
+    <button class="btn btn-gold" onclick="showLevelSelect()">🗺️ Peringkat</button>
+    <button class="btn btn-out" onclick="shuffleLevel()">🔀 Kacau Semula</button>
+    <button class="btn btn-out" onclick="hintMove()">💡 Petunjuk</button>
+  </div>
+</div>
+
+<!-- WIN -->
+<div class="overlay" id="overlay-win" style="display:none">
+  <div style="font-size:2.8rem;margin-bottom:8px">⛵🌊</div>
+  <div class="badge-sm">LALUAN DIBUKA!</div>
+  <h1>Armada Bergerak!</h1>
+  <p id="win-desc">Muawiyah bin Abi Sufyan memimpin armada menuju Mediterranean.</p>
+  <div style="font-family:'Cinzel',serif;font-size:.9rem;color:var(--gold);margin-bottom:14px;" id="win-stats"></div>
+  <button class="big-btn" onclick="nextLevel()">▶ Peringkat Seterusnya</button>
+  <button class="big-btn sec" onclick="showLevelSelect()">🗺️ Pilih Peringkat</button>
+</div>
+
+<!-- LEVEL SELECT -->
+<div class="overlay" id="overlay-levels" style="display:none">
+  <div style="font-size:2rem;margin-bottom:6px">🗺️</div>
+  <h1 style="font-size:1.4rem">Pilih Peringkat</h1>
+  <div id="level-select"></div>
+  <button class="big-btn sec" style="margin-top:16px" onclick="document.getElementById('overlay-levels').style.display='none'">✕ Tutup</button>
+</div>
+
+<script>
+// ── STARS ──
+const bg=document.getElementById('bg');
+for(let i=0;i<50;i++){
+  const s=document.createElement('div');s.className='star';
+  const z=Math.random()*1.4+.3;
+  s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*50}%;left:${Math.random()*100}%;animation-delay:${Math.random()*4}s;animation-duration:${2+Math.random()*3}s`;
+  bg.appendChild(s);
+}
+
+// ── TILE TYPES ──
+// Each tile has pipe connections: array of directions it connects
+// Directions: 0=N,1=E,2=S,3=W
+// Tile shapes:
+//  'I'  = [N,S] or [E,W]  — straight
+//  'L'  = [N,E] [E,S] [S,W] [N,W] — corner
+//  'T'  = 3-way
+//  'X'  = 4-way cross
+//  '.'  = empty/blocked
+
+const PIPES={
+  'I_NS':{conns:[0,2],base:'I'},
+  'I_EW':{conns:[1,3],base:'I'},
+  'L_NE':{conns:[0,1],base:'L'},
+  'L_ES':{conns:[1,2],base:'L'},
+  'L_SW':{conns:[2,3],base:'L'},
+  'L_NW':{conns:[0,3],base:'L'},
+  'T_NES':{conns:[0,1,2],base:'T'},
+  'T_ESW':{conns:[1,2,3],base:'T'},
+  'T_NSW':{conns:[0,2,3],base:'T'},
+  'T_NEW':{conns:[0,1,3],base:'T'},
+  'X':{conns:[0,1,2,3],base:'X'},
+};
+
+const ROTATE_MAP={
+  'I_NS':'I_EW','I_EW':'I_NS',
+  'L_NE':'L_ES','L_ES':'L_SW','L_SW':'L_NW','L_NW':'L_NE',
+  'T_NES':'T_ESW','T_ESW':'T_NSW','T_NSW':'T_NEW','T_NEW':'T_NES',
+  'X':'X',
+};
+
+// ── LEVEL DEFINITIONS ──
+// Grid: array of tile types, '.' = sea (no pipe), '*' = locked tile
+// start={r,c} end={r,c} — entry/exit
+// locked = array of {r,c} positions that can't be rotated
+const LEVELS=[
+  // Level 1 — 4x4, simple L-shapes
+  {
+    name:'Akka → Cyprus',desc:'Mudah',
+    size:4,
+    grid:[
+      ['L_ES', 'I_EW', 'L_SW', '.'],
+      ['I_NS', '.',    'I_NS', '.'],
+      ['I_NS', '.',    'L_NE', 'I_EW'],  // wait — build properly
+      ['L_NE', 'I_EW', 'I_EW', 'X'],    // X = endpoint region
+    ],
+    start:{r:0,c:0,dir:0},end:{r:3,c:3},
+    locked:[{r:0,c:0},{r:3,c:3}],
+    solution:[
+      ['L_ES','I_EW','L_SW','.'],
+      ['I_NS','.','I_NS','.'],
+      ['I_NS','.','L_NE','I_EW'],
+      ['L_NE','I_EW','I_EW','X'],
+    ],
+    hint:'Sambungkan dari sudut kiri atas ke kanan bawah',
+    story:'Armada Islam bertolak dari Akka menuju Cyprus…',
+  },
+  // Level 2 — 5x5
+  {
+    name:'Cyprus → Rhodes',desc:'Sederhana',
+    size:5,
+    grid:[
+      ['L_ES','I_EW','T_ESW','I_EW','L_SW'],
+      ['I_NS','.','I_NS','.','I_NS'],
+      ['T_NES','I_EW','X','I_EW','T_NSW'],
+      ['I_NS','.','I_NS','.','I_NS'],
+      ['L_NE','I_EW','T_NEW','I_EW','L_NW'],
+    ],
+    start:{r:0,c:0},end:{r:4,c:4},
+    locked:[{r:0,c:0},{r:4,c:4},{r:2,c:2}],
+    hint:'Guna pusat X sebagai simpang utama',
+    story:'Dari Cyprus, armada berlayar ke pulau Rhodes…',
+  },
+  // Level 3 — 5x5 harder
+  {
+    name:'Rhodes → Constantinople',desc:'Susah',
+    size:5,
+    grid:[
+      ['L_ES','L_SW','.','L_ES','L_SW'],
+      ['I_NS','I_NS','.','I_NS','I_NS'],
+      ['T_NES','T_NEW','I_EW','T_NES','T_NSW'],
+      ['I_NS','I_NS','.','I_NS','I_NS'],
+      ['L_NE','L_ES','I_EW','L_SW','L_NW'],
+    ],
+    start:{r:0,c:0},end:{r:0,c:4},
+    locked:[{r:0,c:0},{r:0,c:4}],
+    hint:'Ada dua laluan — cari yang bersambung',
+    story:'Serangan besar menuju ibu kota Byzantine…',
+  },
+  // Level 4 — 6x6
+  {
+    name:'Pertempuran Tiang Kapal',desc:'Sukar',
+    size:6,
+    grid:[
+      ['L_ES','I_EW','L_SW','.','L_ES','L_SW'],
+      ['I_NS','.','I_NS','.','I_NS','I_NS'],
+      ['T_NES','I_EW','X','I_EW','X','T_NSW'],
+      ['I_NS','.','I_NS','.','I_NS','I_NS'],
+      ['I_NS','.','T_NEW','I_EW','T_NES','I_NS'],
+      ['L_NE','I_EW','I_EW','I_EW','I_EW','L_NW'],
+    ],
+    start:{r:0,c:0},end:{r:0,c:5},
+    locked:[{r:0,c:0},{r:0,c:5},{r:2,c:2},{r:2,c:4}],
+    hint:'Dua laluan X disambungkan di bawah',
+    story:'Pertempuran Tiang Kapal 654M — kemenangan besar Islam!',
+  },
+  // Level 5 — 6x6 maze-like
+  {
+    name:'Kuasai Mediterranean',desc:'Pakar',
+    size:6,
+    grid:[
+      ['L_ES','I_EW','T_ESW','I_EW','T_ESW','L_SW'],
+      ['I_NS','.','I_NS','.','I_NS','.'],
+      ['T_NES','I_EW','X','I_EW','X','I_EW'],
+      ['I_NS','.','I_NS','.','I_NS','.'],
+      ['T_NES','I_EW','T_NEW','I_EW','T_NSW','I_EW'],
+      ['L_NE','I_EW','I_EW','I_EW','I_EW','L_NW'],
+    ],
+    start:{r:0,c:0},end:{r:5,c:5},
+    locked:[{r:0,c:0},{r:5,c:5}],
+    hint:'Ikut laluan luar terlebih dahulu',
+    story:'Islam menguasai seluruh Laut Mediterranean!',
+  },
+  // Level 6 — 7x7
+  {
+    name:'Empayar Islam Berkuasa',desc:'Legenda',
+    size:7,
+    grid:[
+      ['L_ES','I_EW','T_ESW','I_EW','T_ESW','I_EW','L_SW'],
+      ['I_NS','.','I_NS','.','I_NS','.','I_NS'],
+      ['T_NES','I_EW','X','I_EW','X','I_EW','T_NSW'],
+      ['I_NS','.','I_NS','.','I_NS','.','I_NS'],
+      ['T_NES','I_EW','X','I_EW','X','I_EW','T_NSW'],
+      ['I_NS','.','I_NS','.','I_NS','.','I_NS'],
+      ['L_NE','I_EW','T_NEW','I_EW','T_NEW','I_EW','L_NW'],
+    ],
+    start:{r:0,c:0},end:{r:6,c:6},
+    locked:[{r:0,c:0},{r:6,c:6},{r:2,c:2},{r:2,c:4},{r:4,c:2},{r:4,c:4}],
+    hint:'Guna semua X sebagai pusat rangkaian',
+    story:'Armada Islam menjadi kuasa laut terbesar dunia!',
+  },
+];
+
+// ── GAME STATE ──
+let state={
+  level:0,
+  grid:[],    // current tile types
+  size:0,
+  locked:new Set(),
+  moves:0,
+  timer:0,timerActive:false,timerID:null,
+  solved:false,
+  path:[],   // solved path coords
+};
+
+let TPXBASE=76;
+let TPX=76;
+
+function computeTPX(){
+  const maxW=Math.min(window.innerWidth-24,480);
+  TPX=Math.floor(maxW/state.size);
+}
+
+// ── INIT LEVEL ──
+function loadLevel(lvIdx){
+  clearInterval(state.timerID);
+  const lv=LEVELS[lvIdx];
+  state.level=lvIdx;
+  state.size=lv.size;
+  state.moves=0;
+  state.timer=0;
+  state.solved=false;
+  state.path=[];
+
+  // deep copy grid
+  state.grid=lv.grid.map(row=>[...row]);
+  state.locked=new Set(lv.locked.map(({r,c})=>`${r},${c}`));
+
+  computeTPX();
+  shuffleNonLocked();
+  renderGrid();
+  updateHUD();
+  startTimer();
+  setMsg('Putar kepingan peta — sambungkan laluan kapal!');
+  document.getElementById('level-badge').textContent=`PERINGKAT ${lvIdx+1}`;
+  document.getElementById('sailing-ship').style.display='none';
+  document.getElementById('overlay-win').style.display='none';
+  document.getElementById('overlay-levels').style.display='none';
+}
+
+function shuffleNonLocked(){
+  const lv=LEVELS[state.level];
+  for(let r=0;r<state.size;r++){
+    for(let c=0;c<state.size;c++){
+      if(state.grid[r][c]==='.')continue;
+      if(state.locked.has(`${r},${c}`))continue;
+      // rotate randomly 0-3 times
+      const times=Math.floor(Math.random()*4);
+      for(let t=0;t<times;t++)state.grid[r][c]=ROTATE_MAP[state.grid[r][c]]||state.grid[r][c];
+    }
+  }
+}
+
+function shuffleLevel(){
+  if(state.solved)return;
+  shuffleNonLocked();
+  state.moves=0;state.path=[];
+  renderGrid();updateHUD();setMsg('Dikacau semula — cuba lagi!');
+}
+
+// ── RENDER ──
+function renderGrid(){
+  const grid=document.getElementById('grid');
+  grid.style.gridTemplateColumns=`repeat(${state.size},${TPX}px)`;
+  grid.innerHTML='';
+  const lv=LEVELS[state.level];
+
+  for(let r=0;r<state.size;r++){
+    for(let c=0;c<state.size;c++){
+      const tile=document.createElement('div');
+      tile.className='tile';
+      tile.style.width=TPX+'px';tile.style.height=TPX+'px';
+      const key=`${r},${c}`;
+      const type=state.grid[r][c];
+      const isLocked=state.locked.has(key);
+      const isStart=(lv.start.r===r&&lv.start.c===c);
+      const isEnd=(lv.end.r===r&&lv.end.c===c);
+      const onPath=state.path.some(p=>p.r===r&&p.c===c);
+
+      if(isStart)tile.classList.add('start');
+      if(isEnd)tile.classList.add('end');
+      if(isLocked)tile.classList.add('locked');
+
+      // draw pipe
+      if(type&&type!=='.'){
+        const cvs=document.createElement('canvas');
+        cvs.width=TPX;cvs.height=TPX;
+        drawPipe(cvs,type,onPath,isStart,isEnd);
+        tile.appendChild(cvs);
+      }
+
+      // start/end icons
+      if(isStart){
+        const icon=document.createElement('div');
+        icon.style.cssText=`position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:${TPX*.38}px;z-index:5;pointer-events:none;`;
+        icon.textContent='⚓';
+        tile.appendChild(icon);
+      }
+      if(isEnd){
+        const icon=document.createElement('div');
+        icon.style.cssText=`position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:${TPX*.38}px;z-index:5;pointer-events:none;`;
+        icon.textContent='🏯';
+        tile.appendChild(icon);
+      }
+
+      if(!isLocked&&type!=='.'){
+        tile.addEventListener('click',()=>rotateTile(r,c));
+      }
+      grid.appendChild(tile);
+    }
+  }
+}
+
+// ── DRAW PIPE ON CANVAS ──
+function drawPipe(cvs,type,onPath,isStart,isEnd){
+  const ctx=cvs.getContext('2d');
+  const w=cvs.width,h=cvs.height;
+  const mid=w/2,thick=w*.18;
+  ctx.clearRect(0,0,w,h);
+
+  const color=onPath
+    ?`rgba(40,180,255,0.9)`
+    :`rgba(50,100,160,0.65)`;
+  const glow=onPath?`rgba(80,200,255,0.4)`:null;
+
+  ctx.lineCap='round';ctx.lineJoin='round';
+
+  if(glow&&onPath){
+    ctx.shadowBlur=10;ctx.shadowColor=glow;
+  }
+
+  ctx.strokeStyle=color;
+  ctx.lineWidth=thick;
+
+  const conns=PIPES[type]?.conns||[];
+  // draw lines from center to each connection edge
+  for(const dir of conns){
+    ctx.beginPath();
+    ctx.moveTo(mid,mid);
+    if(dir===0)ctx.lineTo(mid,0);        // N
+    else if(dir===1)ctx.lineTo(w,mid);   // E
+    else if(dir===2)ctx.lineTo(mid,h);   // S
+    else if(dir===3)ctx.lineTo(0,mid);   // W
+    ctx.stroke();
+  }
+
+  // center dot
+  ctx.shadowBlur=0;
+  ctx.fillStyle=onPath?'rgba(100,220,255,0.9)':'rgba(60,120,200,0.7)';
+  ctx.beginPath();ctx.arc(mid,mid,thick*.55,0,Math.PI*2);ctx.fill();
+
+  // flow dots if on path
+  if(onPath){
+    ctx.fillStyle='rgba(200,240,255,0.7)';
+    for(const dir of conns){
+      const t=0.4;
+      const dx=dir===1?w*t:dir===3?-w*t:0;
+      const dy=dir===2?h*t:dir===0?-h*t:0;
+      ctx.beginPath();ctx.arc(mid+dx,mid+dy,thick*.25,0,Math.PI*2);ctx.fill();
+    }
+  }
+}
+
+// ── ROTATE ──
+function rotateTile(r,c){
+  if(state.solved)return;
+  if(state.locked.has(`${r},${c}`))return;
+  if(state.grid[r][c]==='.')return;
+  state.grid[r][c]=ROTATE_MAP[state.grid[r][c]]||state.grid[r][c];
+  state.moves++;
+  updateHUD();
+
+  // check path
+  state.path=solvePath();
+  renderGrid();
+
+  if(state.path.length>0&&checkSolved()){
+    onSolved();
+  } else {
+    setMsg(state.moves===1?'Teruskan…':
+      state.moves<5?'Hampir sampai?':
+      state.moves<10?'Fikir dengan teliti…':
+      'Sabar — setiap laluan ada penyelesaiannya');
+  }
+}
+
+// ── PATH SOLVER (BFS along connected pipes) ──
+function solvePath(){
+  const lv=LEVELS[state.level];
+  const start=lv.start;
+  const end=lv.end;
+  const visited=new Set();
+  const queue=[{r:start.r,c:start.c,path:[{r:start.r,c:start.c}]}];
+
+  while(queue.length){
+    const {r,c,path}=queue.shift();
+    const key=`${r},${c}`;
+    if(visited.has(key))continue;
+    visited.add(key);
+
+    if(r===end.r&&c===end.c)return path;
+
+    const type=state.grid[r][c];
+    if(!type||type==='.')continue;
+    const conns=PIPES[type]?.conns||[];
+
+    for(const dir of conns){
+      const [nr,nc,opp]=dir===0?[r-1,c,2]:dir===1?[r,c+1,3]:dir===2?[r+1,c,0]:[r,c-1,1];
+      if(nr<0||nr>=state.size||nc<0||nc>=state.size)continue;
+      const ntype=state.grid[nr][nc];
+      if(!ntype||ntype==='.')continue;
+      const nconns=PIPES[ntype]?.conns||[];
+      if(nconns.includes(opp)&&!visited.has(`${nr},${nc}`)){
+        queue.push({r:nr,c:nc,path:[...path,{r:nr,c:nc}]});
+      }
+    }
+  }
+  return [];
+}
+
+function checkSolved(){
+  const lv=LEVELS[state.level];
+  const end=lv.end;
+  return state.path.length>0&&
+    state.path[state.path.length-1].r===end.r&&
+    state.path[state.path.length-1].c===end.c;
+}
+
+// ── WIN ──
+function onSolved(){
+  state.solved=true;
+  clearInterval(state.timerID);
+  animateShip();
+  setTimeout(()=>{
+    const lv=LEVELS[state.level];
+    const mins=Math.floor(state.timer/60);
+    const secs=state.timer%60;
+    const rating=state.moves<=10?'S ⭐':state.moves<=18?'A':state.moves<=28?'B':'C';
+    document.getElementById('win-desc').textContent=lv.story;
+    document.getElementById('win-stats').textContent=
+      `${state.moves} gerakan · ${mins}:${String(secs).padStart(2,'0')} masa · Penilaian ${rating}`;
+    document.getElementById('overlay-win').style.display='flex';
+  },1800);
+  setMsg('🌊 Laluan terbuka! Armada Islam belayar maju!');
+}
+
+function animateShip(){
+  const ship=document.getElementById('sailing-ship');
+  const wrap=document.getElementById('grid-wrap');
+  if(!state.path.length)return;
+  ship.style.display='block';
+  let idx=0;
+  const step=()=>{
+    if(idx>=state.path.length){ship.style.display='none';return;}
+    const {r,c}=state.path[idx];
+    ship.style.left=(c*TPX+TPX*.25)+'px';
+    ship.style.top=(r*TPX+TPX*.18)+'px';
+    ship.style.fontSize=(TPX*.45)+'px';
+    idx++;
+    setTimeout(step,200);
+  };
+  step();
+}
+
+// ── HINT ──
+function hintMove(){
+  if(state.solved)return;
+  const lv=LEVELS[state.level];
+  setMsg(`💡 ${lv.hint}`);
+  setTimeout(()=>setMsg('Putar kepingan peta — sambungkan laluan kapal!'),3000);
+}
+
+// ── TIMER ──
+function startTimer(){
+  clearInterval(state.timerID);
+  state.timerActive=true;
+  state.timerID=setInterval(()=>{
+    if(!state.solved){state.timer++;updateHUD();}
+  },1000);
+}
+
+function updateHUD(){
+  document.getElementById('hud-moves').textContent=state.moves;
+  const m=Math.floor(state.timer/60),s=state.timer%60;
+  document.getElementById('hud-time').textContent=`${m}:${String(s).padStart(2,'0')}`;
+}
+
+function setMsg(t){document.getElementById('msg').textContent=t;}
+
+// ── LEVEL SELECT ──
+function showLevelSelect(){
+  const container=document.getElementById('level-select');
+  container.innerHTML='';
+  LEVELS.forEach((lv,i)=>{
+    const btn=document.createElement('div');
+    btn.className='lv-btn';
+    btn.innerHTML=`<span class="lv-n">${i+1}</span>${lv.name}<div class="lv-d">${lv.desc} · ${lv.size}×${lv.size}</div>`;
+    btn.addEventListener('click',()=>loadLevel(i));
+    container.appendChild(btn);
+  });
+  document.getElementById('overlay-levels').style.display='flex';
+}
+
+function nextLevel(){
+  document.getElementById('overlay-win').style.display='none';
+  const next=(state.level+1)%LEVELS.length;
+  loadLevel(next);
+}
+
+window.addEventListener('resize',()=>{
+  computeTPX();
+  renderGrid();
+});
+
+// START
+loadLevel(0);
+</script>
+</body>
+</html>
